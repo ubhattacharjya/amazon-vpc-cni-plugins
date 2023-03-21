@@ -59,6 +59,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		DNSServers:          netConfig.DNS.Nameservers,
 		DNSSuffixSearchList: netConfig.DNS.Search,
 		UseExisting:         netConfig.UseExistingNetwork,
+		StayDown:            netConfig.StayDown,
 	}
 
 	err = nb.FindOrCreateNetwork(&nw)
@@ -71,9 +72,11 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 	ep := network.Endpoint{
 		ContainerID: args.ContainerID,
 		NetNSName:   args.Netns,
+		ENIName:     args.IfName,
 		MACAddress:  netConfig.ENIMACAddress,
 		IPAddresses: netConfig.ENIIPAddresses,
 		BlockIMDS:   netConfig.BlockIMDS,
+		MTU:         netConfig.MTU,
 	}
 
 	err = nb.FindOrCreateEndpoint(&nw, &ep)

@@ -36,13 +36,16 @@ type Network struct {
 	DNSServers          []string
 	DNSSuffixSearchList []string
 	UseExisting         bool
+	StayDown            bool
 }
 
 // Endpoint represents a container network interface.
 type Endpoint struct {
 	ContainerID string
+	ENIName     string
 	NetNSName   string
 	MACAddress  net.HardwareAddr
 	IPAddresses []net.IPNet
 	BlockIMDS   bool
+	MTU         int
 }

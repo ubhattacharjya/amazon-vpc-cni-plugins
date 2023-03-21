@@ -28,23 +28,29 @@ import (
 // NetConfig defines the network configuration for the vpc-eni plugin.
 type NetConfig struct {
 	cniTypes.NetConf
+	ENIID              string
 	ENIName            string
 	ENIMACAddress      net.HardwareAddr
 	ENIIPAddresses     []net.IPNet
 	GatewayIPAddresses []net.IP
 	UseExistingNetwork bool
 	BlockIMDS          bool
+	MTU                int
+	StayDown           bool
 }
 
 // netConfigJSON defines the network configuration JSON file format for the vpc-eni plugin.
 type netConfigJSON struct {
 	cniTypes.NetConf
 	ENIName            string   `json:"eniName"`
+	ENIID              string   `json:"eni"`
 	ENIMACAddress      string   `json:"eniMACAddress"`
 	ENIIPAddresses     []string `json:"eniIPAddresses"`
 	GatewayIPAddresses []string `json:"gatewayIPAddresses"`
 	UseExistingNetwork bool     `json:"useExistingNetwork"`
 	BlockIMDS          bool     `json:"blockInstanceMetadata"`
+	MTU                int      `json:"mtu"`
+	StayDown           bool     `json:"stay-down"`
 }
 
 // New creates a new NetConfig object by parsing the given CNI arguments.

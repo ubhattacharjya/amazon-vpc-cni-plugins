@@ -68,12 +68,41 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 		log.Infof("Moving link %s to netns %s.", nw.SharedENI, nw.BridgeNetNSPath)
 		err = nw.SharedENI.SetNetNS(bridgeNetNS)
 		if err != nil {
-			log.Errorf("Failed to move link: %v.", err)
-			return err
+			log.Infof("Failed to move link: %v.", err)
 		}
 
 		// Connect the ENI to a bridge in the bridge network namespace.
 		err = bridgeNetNS.Run(func() error {
+			// Set ENI IP addresses if specified.
+			for _, ipAddress := range nw.ENIIPAddresses {
+				// Assign the IP address.
+				err = nw.SharedENI.AddIPAddress(&ipAddress)
+				if err != nil {
+					log.Errorf("Failed to assign IP address to eni %v: %v.", nw.SharedENI, err)
+					return err
+				}
+			}
+	 
+			log.Infof("Setting ENI link state up.")
+			err = nw.SharedENI.SetOpState(true)
+			if err != nil {
+				log.Errorf("Failed to set link %v state: %v.", nw.SharedENI, err)
+				return err
+			}
+
+			// Add default route via ENI link.
+			route := &netlink.Route{
+				Gw:        nw.GatewayIPAddress,
+				LinkIndex: nw.SharedENI.GetLinkIndex(),
+			}
+			log.Infof("Adding default IP route %+v.", route)
+			err = netlink.RouteAdd(route)
+			if err != nil {
+				log.Errorf("Failed to add IP route %+v via ENI %v: %v.", route, nw.SharedENI, err)
+				return err
+			}
+
+
 			nw.BridgeIndex, err = nb.createBridge(
 				bridgeName, nw.BridgeType, nw.SharedENI, nw.ENIIPAddresses)
 			return err
@@ -98,7 +127,7 @@ func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 	err := nb.deleteBridge(bridgeName, nw.BridgeType, nw.SharedENI)
 
 	if err != nil {
-		log.Errorf("Failed to delete bridge: %v.", err)
+		log.Infof("Failed to delete bridge: %v.", err)
 	}
 
 	return err
@@ -122,10 +151,10 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 		return err
 	}
 
-	// Connect the bridge to the target network namespace with a veth pair.
-	err = nb.createVethPair(nw.BridgeIndex, targetNetNS, vethLinkName, vethPeerName)
+	log.Infof("Searching for bridge netns while creating veth pair %s.", nw.BridgeNetNSPath)
+	bridgeNetNS, err := netns.GetNetNSByName(ep.NetworkNetNSName)
 	if err != nil {
-		log.Errorf("Failed to create veth pair %s: %v.", vethLinkName, err)
+		log.Errorf("Failed to find bridge netns %s: %v.", nw.BridgeNetNSPath, err)
 		return err
 	}
 
@@ -134,6 +163,14 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 	var gatewayIPv6Address net.IP
 	var gatewayIPAddresses []net.IP
 	var gatewayMACAddress net.HardwareAddr
+
+	err = bridgeNetNS.Run(func() error {
+		// Connect the bridge to the target network namespace with a veth pair.
+		err = nb.createVethPair(nw.BridgeIndex, targetNetNS, vethLinkName, vethPeerName)
+		if err != nil {
+			log.Errorf("Failed to create veth pair %s: %v.", vethLinkName, err)
+			return err
+		}
 
 	if nw.BridgeType == config.BridgeTypeL3 {
 		// Configure the endpoint to relay the default gateway traffic to the on-link bridge.
@@ -200,7 +237,8 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 			}
 		}
 	}
-
+	return err
+	})
 	// Setup the target network namespace.
 	err = targetNetNS.Run(func() error {
 		ep.MACAddress, err = nb.setupTargetNetNS(
@@ -694,6 +732,18 @@ func (nb *BridgeBuilder) createVethPair(
 	err = netlink.LinkSetUp(vethLink)
 	if err != nil {
 		log.Errorf("Failed to set veth link %s state up: %v.", vethLinkName, err)
+		return err
+	}
+
+	ipAddress, err := vpc.GetIPAddressFromString("169.254.170.1/24")
+	if err != nil {
+		return err
+	}
+
+	address := &netlink.Addr{IPNet: ipAddress}
+	err = netlink.AddrAdd(vethLink, address)
+	if err != nil {
+		log.Errorf("Failed to assign IP address to link %v: %v.", vethLink, err)
 		return err
 	}
 

@@ -85,6 +85,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 		IfType:      netConfig.InterfaceType,
 		TapUserID:   netConfig.TapUserID,
 		IPAddresses: netConfig.IPAddresses,
+		NetworkNetNSName: netConfig.BridgeNetNSPath,
 	}
 
 	err = nb.FindOrCreateEndpoint(&nw, &ep)
@@ -141,6 +142,7 @@ func (plugin *Plugin) Add(args *cniSkel.CmdArgs) error {
 
 // Del is the CNI DEL command handler.
 func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
+	log.Infof("I am in DEL")
 	// Parse network configuration.
 	netConfig, err := config.New(args, false)
 	if err != nil {
@@ -154,15 +156,13 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 	// Find the ENI.
 	sharedENI, err := eni.NewENI(netConfig.ENIName, netConfig.ENIMACAddress)
 	if err != nil {
-		log.Errorf("Failed to find ENI %s: %v.", netConfig.ENIName, err)
-		return err
+		log.Infof("Failed to find ENI %s: %v.", netConfig.ENIName, err)
 	}
 
 	// Find the ENI link.
 	err = sharedENI.AttachToLink()
 	if err != nil {
-		log.Errorf("Failed to find ENI link: %v.", err)
-		return err
+		log.Infof("Failed to find ENI link: %v.", err)
 	}
 
 	// Call operating system specific handler.
@@ -172,7 +172,6 @@ func (plugin *Plugin) Del(args *cniSkel.CmdArgs) error {
 		Name:            netConfig.Name,
 		BridgeType:      netConfig.BridgeType,
 		BridgeNetNSPath: netConfig.BridgeNetNSPath,
-		SharedENI:       sharedENI,
 	}
 
 	ep := network.Endpoint{
